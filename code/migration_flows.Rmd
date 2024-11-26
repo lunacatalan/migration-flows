@@ -1,0 +1,16 @@
+---
+title: "Investigating Migration Flows in and out of NYS"
+
+
+
+---
+
+```{r load libraries, message = FLASE}
+library(tidyverse)
+```
+
+# Read in Data
+```{r}
+ss_23 <- read.csv()
+```
+
