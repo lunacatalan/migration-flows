@@ -8,11 +8,236 @@ title: "Investigating Migration Flows in and out of NYS"
 ```{r load libraries, message = FALSE}
 library(tidyverse)
 library(readxl)
-
+library(here)
 ```
 
 # Read in Data
 ```{r}
-ss_23 <- read_xlsx("C:/Users/lcatalan/OneDrive - NYC OTI/Documents/dev/migration-flows/data/state_to_state_migration/2023.xlsx")
+ss_23 <- read_xlsx(here("data", "state_to_state_migration/2023.xlsx"), skip = 4) %>% 
+  rename(current_res = 1,
+         tot_pop = 2,
+         tot_same_res = 4, # same residence as 1 year ago
+         dif_res = 6, # different residence / same state as 1 year ago
+         tot_dif_state = 8 # different state as 1 year ago
+         ) %>% 
+  slice(-1)
+  
+# Create the column names from the state row
+for (i in seq(10, ncol(ss_23), by = 2)) {
+  if (i <= ncol(ss_23)) {  # Ensure we don't go beyond the number of columns
+    col_name <- as.character(ss_23[2, i])  # Get the value from row 1 of the ith column
+    colnames(ss_23)[i] <- col_name  # Set column name to that value
+    print(i)
+  }
+}
+
+# Create the column names from the state row
+for (i in seq(3, ncol(ss_23), by = 2)) {
+  if (i <= ncol(ss_23)) {  # Ensure we don't go beyond the number of columns
+    col_name <- paste0(as.character(ss_23[3, i]), "_", i)  # Get the value from row 1 of the ith column
+    colnames(ss_23)[i] <- col_name  # Set column name to that value
+    print(i)
+  }
+}
+          
+ss_23 <- ss_23 %>%
+  filter(rowSums(is.na(.)) != ncol(.)) %>% 
+  slice(-c(1:3))
+
+# I had to clean this data before I imported it because it had lots of messy tabls that did not download well
+ss_22 <- read_xlsx(here("data", "state_to_state_migration/2022.xlsx"), skip = 4) %>% 
+  rename(current_res = 1,
+         tot_pop = 2,
+         tot_same_res = 4, # same residence as 1 year ago
+         dif_res = 6, # different residence / same state as 1 year ago
+         tot_dif_state = 8 # different state as 1 year ago
+         )
+
+# I had to clean this data before I imported it because it had lots of messy tabls that did not download well
+ss_21 <- read_xlsx(here("data", "state_to_state_migration/2021.xlsx"), skip = 4) %>% 
+  rename(current_res = 1,
+         tot_pop = 2,
+         tot_same_res = 4, # same residence as 1 year ago
+         dif_res = 6, # different residence / same state as 1 year ago
+         tot_dif_state = 8 # different state as 1 year ago
+         )
+ss_19 <- read_xlsx(here("data", "state_to_state_migration/2019.xlsx"), skip = 4) %>% 
+  rename(current_res = 1,
+         tot_pop = 2,
+         tot_same_res = 4, # same residence as 1 year ago
+         dif_res = 6, # different residence / same state as 1 year ago
+         tot_dif_state = 8 # different state as 1 year ago
+         )
+
+
+## to remove rows that contain all NAs
+#filter(rowSums(is.na(ss_22)) != ncol(ss_22))
+```
+
+## State to state migration
+
+2023:
+Net migration 
+Into NY from other states
+Into NY from Abroad
+
+### Clean data
+```{r}
+
+
+list_df <- list(ss_23, ss_22, ss_21, ss_19)
+clean_df <- list()
+
+for (a in 1:length(list_df)) {
+  
+  d <- list_df[[a]]
+  
+  # Create the column names from the state row
+  for (i in seq(10, ncol(d), by = 2)) {
+    if (i <= ncol(d)) {  # Ensure we don't go beyond the number of columns
+      col_name <- as.character(d[1, i])  # Get the value from row 1 of the ith column
+      colnames(d)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  # Create the column names from the state row
+  for (i in seq(3, ncol(d), by = 2)) {
+    if (i <= ncol(d)) {  # Ensure we don't go beyond the number of columns
+      col_name <- paste0(as.character(d[2, i]), "_", i)  # Get the value from row 1 of the ith column
+      colnames(d)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  d <- d %>%
+    filter(rowSums(is.na(.)) != ncol(.)) %>% 
+    slice(-c(1:2))
+  
+  in_migration <- d %>% 
+  filter(current_res == "New York") %>%
+    pivot_longer(cols = 1:length(d),
+                 names_to = "state")
+  
+  MOE <- in_migration %>%
+    filter(str_detect(state, "MOE")) %>%
+    rename(stat = 1,
+           moe = 2)
+  
+  in_migration <- in_migration %>%
+    filter(!str_detect(state, "MOE")) %>%
+    filter(!str_detect(state, "current_res")) %>%
+    cbind(MOE) %>%
+    select(!stat) %>%
+    mutate(value = as.numeric(value),
+           moe = as.numeric(moe))
+  
+  clean_df[[a]] <- in_migration
+  
+}
+
+s23 <- clean_df[[1]]%>% 
+  rename(value_23 = value,
+         moe_23 = moe)
+s22 <- clean_df[[2]] %>% 
+  rename(value_22 = value,
+         moe_22 = moe)
+s21 <- clean_df[[3]] %>% 
+  rename(value_21= value,
+         moe_21 = moe)
+s19 <- clean_df[[4]] %>% 
+  rename(value_19 = value,
+         moe_19 = moe)
+
+s19_s23 <- s23 %>% 
+  left_join(s22, by = "state") %>% 
+  left_join(s21, by = "state") %>% 
+  left_join(s19, by = "state") %>% 
+  pivot_longer(cols = 2:9,
+               names_to = "year") %>% 
+  filter(grepl("value", year)) %>% 
+  mutate(year = gsub("value_", "", year))
+
+```
+
+### Explore trends for state to state migration in 2023
+
+2023:
+
+The top 5 states migrating to NY in 2023: 
+-   Massachusetts
+-   Florida
+-   Pennsylvania
+-   California
+-   New Jersey
+
+```{r}
+# Example ggplot with ordering by value from highest to lowest
+ggplot(s19_s23 %>% 
+         filter(Massachusetts, Florida, Pennsylvania, California, New Jersey), # remove the top
+       aes(x = reorder(state, year), y = value_23/1000)) +
+  geom_col() +
+  labs(title = "Top 5 States Migrating to New York", x = "State", y = "Persons (per 1000 people)") +
+  theme_minimal()
+```
+
+
+```{r}
+# Example ggplot with ordering by value from highest to lowest
+ggplot(s23 %>% 
+         slice(-c(1:4)) %>% 
+         arrange(desc(value_23)) %>% 
+         filter(!str_detect(state, "Foreign")) %>% # remove the foreign country part
+         filter(!str_detect(state, "Total")) %>%
+         slice(c(1:5)), # remove the top
+       aes(x = reorder(state, value_23), y = value_23/1000)) +
+  geom_col() +
+  labs(title = "Top 5 States Migrating to New York", x = "State", y = "Persons (per 1000 people)") +
+  theme_minimal()
+
+ggplot(s22 %>% 
+         slice(-c(1:4)) %>% 
+         arrange(desc(value_22)) %>% 
+         filter(!str_detect(state, "Foreign")) %>% # remove the foreign country part
+         filter(!str_detect(state, "Total")) %>%
+         slice(c(1:5)), # remove the top
+       aes(x = reorder(state, value_22), y = value_22/1000)) +
+  geom_col() +
+  labs(title = "Top 5 States Migrating to New York", x = "State", y = "Persons (per 1000 people)") +
+  theme_minimal()
+
+ggplot(s21 %>% 
+         slice(-c(1:4)) %>% 
+         arrange(desc(value_21)) %>% 
+         filter(!str_detect(state, "Foreign")) %>% # remove the foreign country part
+         filter(!str_detect(state, "Total")) %>%
+         slice(c(1:5)), # remove the top
+       aes(x = reorder(state, value_21), y = value_21/1000)) +
+  geom_col() +
+  labs(title = "Top 5 States Migrating to New York", x = "State", y = "Persons (per 1000 people)") +
+  theme_minimal()
+
+ggplot(s19 %>% 
+         slice(-c(1:4)) %>% 
+         arrange(desc(value_19)) %>% 
+         filter(!str_detect(state, "Foreign")) %>% # remove the foreign country part
+         filter(!str_detect(state, "Total")) %>%
+         slice(c(1:5)), # remove the top
+       aes(x = reorder(state, value_19), y = value_19/1000)) +
+  geom_col() +
+  labs(title = "Top 5 States Migrating to New York", x = "State", y = "Persons (per 1000 people)") +
+  theme_minimal()
+```
+
+### Comparing migration across years
+```{r}
+
+```
+
+
+Out of NY to other states
+Out of NY abroad 
+
+```{r}
+out_migration <-ss_23 %>% 
+  select(1:9, "New York", 75) 
 ```
 
