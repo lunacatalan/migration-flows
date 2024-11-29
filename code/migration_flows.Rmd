@@ -13,8 +13,8 @@ library(here)
 
 # Read in Data
 
-## State to state migration
-```{r}
+## State to state migration Data
+```{r message = FALSE, warning = FALSE}
 ss_23 <- read_xlsx(here("data", "state_to_state_migration/2023.xlsx"), skip = 4) %>% 
   rename(current_res = 1,
          tot_pop = 2,
@@ -54,6 +54,7 @@ ss_19 <- read_xlsx(here("data", "state_to_state_migration/2019.xlsx"), skip = 4)
 #filter(rowSums(is.na(ss_22)) != ncol(ss_22))
 ```
 
+
 ## State to state migration
 
 2023:
@@ -62,7 +63,7 @@ Into NY from other states
 Into NY from Abroad
 
 ### Clean data
-```{r}
+```{r message = FALSE, warning = FALSE}
 
 
 list_df <- list(ss_23, ss_22, ss_21, ss_19)
@@ -201,13 +202,70 @@ s19_s23 %>%
 ### Where are New Yorkers moving to?
 
 Out of NY to other states
+-   `new_prop` is a measure of the percent of the total population migrating to their current residence in 2023, that are from NYS.
 
 ```{r}
 out23 <- clean_df[[1]] %>% 
   select(1:9, "New York", 75) %>% 
   mutate(across(-1, as.numeric)) %>% 
   slice(-c(54:63)) %>% 
-  rename(ny_value = 10)
+  rename(ny_value = 10) %>% 
+  # the % of the people coming from NY that make up the migration to these states
+  mutate(new_prop = (tot_dif_state/tot_pop)*100) %>% 
+  arrange(-ny_value) %>%
+  head(11) %>% 
+  slice(-1) %>%  # remove total pop
+  select(current_res, tot_pop, 10:12) %>% 
+  rename(MOE_75 = 4) %>% 
+  mutate(year = 2023)
+
+out22 <- clean_df[[2]] %>% 
+  select(1:9, "New York", 75) %>% 
+  mutate(across(-1, as.numeric)) %>% 
+  slice(-c(54:63)) %>% 
+  rename(ny_value = 10) %>% 
+  # the % of the people coming from NY that make up the migration to these states
+  mutate(new_prop = (tot_dif_state/tot_pop)*100) %>% 
+  arrange(-ny_value) %>%
+  head(11) %>% 
+  slice(-1) %>%  # remove total pop
+  select(current_res, tot_pop, 10:12) %>% 
+  mutate(year = 2022)
+
+out21 <- clean_df[[3]] %>% 
+  select(1:9, "New York", 75) %>% 
+  mutate(across(-1, as.numeric)) %>% 
+  slice(-c(54:63)) %>% 
+  rename(ny_value = 10) %>% 
+  # the % of the people coming from NY that make up the migration to these states
+  mutate(new_prop = (tot_dif_state/tot_pop)*100) %>% 
+  arrange(-ny_value) %>%
+  head(11) %>% 
+  slice(-1) %>%  # remove total pop
+  select(current_res, tot_pop, 10:12) %>% 
+  mutate(year = 2021)
+
+out19 <- clean_df[[4]] %>% 
+  select(1:9, "New York", 75) %>% 
+  mutate(across(-1, as.numeric)) %>% 
+  slice(-c(54:63)) %>% 
+  rename(ny_value = 10) %>% 
+  # the % of the people coming from NY that make up the migration to these states
+  mutate(new_prop = (tot_dif_state/tot_pop)*100) %>% 
+  arrange(-ny_value) %>%
+  head(11) %>% 
+  slice(-1) %>%  # remove total pop
+  select(current_res, tot_pop, 10:12) %>% 
+  mutate(year = 2019)
+
+out <- rbind(out19, out21, out22, out23)
+```
+
+
+```{r}
+
+ggplot(out, aes(x = year, y = ny_value, fill = current_res)) +
+  geom_col(position = "dodge")
 
 ggplot(out23 %>% 
          slice(-1) %>% 
@@ -218,14 +276,6 @@ ggplot(out23 %>%
        x = "State", 
        y = "Persons (per 1000 people)") +
   theme_minimal()
-```
-
-```{r}
-out22 <- clean_df[[2]] %>% 
-  select(1:9, "New York", 75) %>% 
-  mutate(across(-1, as.numeric)) %>% 
-  slice(-c(54:63)) %>% 
-  rename(ny_value = 10)
 
 ggplot(out22 %>% 
          slice(-1) %>% 
@@ -236,14 +286,6 @@ ggplot(out22 %>%
        x = "State", 
        y = "Persons (per 1000 people)") +
   theme_minimal()
-```
-
-```{r}
-out21 <- clean_df[[3]] %>% 
-  select(1:9, "New York", 75) %>% 
-  mutate(across(-1, as.numeric)) %>% 
-  slice(-c(54:63)) %>% 
-  rename(ny_value = 10)
 
 ggplot(out21 %>% 
          slice(-1) %>% 
@@ -254,13 +296,7 @@ ggplot(out21 %>%
        x = "State", 
        y = "Persons (per 1000 people)") +
   theme_minimal()
-```
-```{r}
-out19 <- clean_df[[4]] %>% 
-  select(1:9, "New York", 75) %>% 
-  mutate(across(-1, as.numeric)) %>% 
-  slice(-c(54:63)) %>% 
-  rename(ny_value = 10)
+
 
 ggplot(out19 %>% 
          slice(-1) %>% 
@@ -272,3 +308,104 @@ ggplot(out19 %>%
        y = "Persons (per 1000 people)") +
   theme_minimal()
 ```
+
+## State of residence by birthplace
+
+### Read in the data files and clean them
+```{r}
+
+# Directory where the Excel files are stored
+file_dir <- here("data", "state_of_residence_by_birthplace")
+
+# List all Excel files in the directory
+files <- list.files(file_dir, pattern = "*.xlsx", full.names = TRUE)
+
+# Define a function to process each file
+process_file <- function(file_path) {
+  # Extract year from the file name (assuming year is in the filename)
+  year <- sub(".*([0-9]{4}).xlsx", "\\1", basename(file_path))
+  
+  # Read and process the data
+  df <- read_xlsx(file_path, skip = 4) %>%
+    rename(current_res = 1,
+           tot_pop = 2) %>%  # different state as 1 year ago
+    select(-3)
+  
+  # Create the column names from the state row
+  for (i in seq(3, ncol(df), by = 2)) {
+    if (i <= ncol(df)) {  # Ensure we don't go beyond the number of columns
+      col_name <- as.character(df[1, i])  # Get the value from row 1 of the ith column
+      colnames(df)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  # Create the column names from the moe row
+  for (i in seq(4, ncol(df), by = 2)) {
+    if (i <= ncol(df)) {  # Ensure we don't go beyond the number of columns
+      col_name <- paste0(as.character(df[2, i]), "_", i)  # Get the value from row 1 of the ith column
+      colnames(df)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  df <- df %>%
+    slice(-c(1:3)) %>%
+    filter(rowSums(is.na(.)) != ncol(.)) %>% 
+    slice(-c(54:dim(df[1])))
+  
+  # Dynamically assign the processed dataframe to a variable named sb_<year>
+  assign(paste0("sb_", year), df, envir = .GlobalEnv)
+}
+
+# Apply the function to all files in the folder
+lapply(files, process_file)
+
+```
+
+## Where are people in NYS from?
+```{r}
+sb_2023 %>% 
+  filter(current_res == "New York") %>% 
+  pivot_longer(cols = 2:118,
+               names_to = "state",
+               values_to = "pop") %>% 
+  filter(!str_detect(state, "MOE")) %>% 
+  mutate(pop = as.numeric(pop)) %>% 
+  arrange(-pop) %>% 
+  mutate(perc = round((pop/19571216)*100, 2))
+```
+```{r}
+list_df <- list(sb_2023, sb_2022, sb_2021, sb_2019)
+# Initialize an empty dataframe to hold the final combined result
+final_df <- data.frame()
+years <- c(2023, 2022, 2021, 2019)
+
+for (a in 1:length(list_df)) {
+  
+  d <- list_df[[a]]
+  year <- gsub("sb_", "", names(list_df)[a])  # Extract year from the list name (sb_2023 -> 2023)
+  
+  d <- d %>% 
+    filter(current_res == "New York") %>% 
+    pivot_longer(cols = 2:118,
+                 names_to = "state",
+                 values_to = "pop") %>% 
+    filter(!str_detect(state, "MOE")) %>% 
+    mutate(pop = as.numeric(pop)) %>% 
+    arrange(-pop) %>% 
+    mutate(perc = round((pop/19571216)*100, 2),
+           year = years[a])
+  
+  # Bind the current data frame (d) into the final_df
+  final_df <- bind_rows(final_df, d)
+  
+}
+
+final_df %>%
+  group_by(year, state) %>% 
+  arrange(-pop) 
+  pivot_wider(names_from = year,
+              values_from = c(pop, perc))
+
+```
+
+
