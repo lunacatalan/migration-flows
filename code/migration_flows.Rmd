@@ -9,6 +9,7 @@ title: "Investigating Migration Flows in and out of NYS"
 library(tidyverse)
 library(readxl)
 library(here)
+library(gt)
 ```
 
 # Read in Data
@@ -64,8 +65,6 @@ Into NY from Abroad
 
 ### Clean data
 ```{r message = FALSE, warning = FALSE}
-
-
 list_df <- list(ss_23, ss_22, ss_21, ss_19)
 clean_df <- list()
 
@@ -129,27 +128,185 @@ in_migration <- d %>%
 
 s23 <- in_df[[1]]%>% 
   rename(value_23 = value,
-         moe_23 = moe)
+         moe_23 = moe) %>% 
+  arrange(-value_23) %>% 
+  slice(1:11)
 s22 <- in_df[[2]] %>% 
   rename(value_22 = value,
-         moe_22 = moe)
+         moe_22 = moe) %>% 
+  arrange(-value_22) %>% 
+  slice(1:11)
 s21 <- in_df[[3]] %>% 
   rename(value_21= value,
-         moe_21 = moe)
+         moe_21 = moe) %>% 
+  arrange(-value_21) %>% 
+  slice(1:11)
 s19 <- in_df[[4]] %>% 
   rename(value_19 = value,
-         moe_19 = moe)
+         moe_19 = moe) %>% 
+  arrange(-value_19) %>% 
+  slice(1:11)
+
 
 s19_s23 <- s23 %>% 
   left_join(s22, by = "state") %>% 
   left_join(s21, by = "state") %>% 
   left_join(s19, by = "state") %>% 
-  pivot_longer(cols = 2:9,
-               names_to = "year") %>% 
-  filter(grepl("value", year)) %>% 
-  mutate(year = gsub("value_", "", year))
+  select(-which(grepl("moe", colnames(.), ignore.case = TRUE)))
+
+colnames(s19_s23) <- c("State", 2023, 2022, 2021, 2019)
+
+table1 <- gt(s19_s23 %>% 
+     slice(6:11)) %>% 
+  tab_header(
+    title = "Migration Into New York State",
+    subtitle = "The top five states that people are moving from to NYS 2019-2023."
+  )
+
+# Save as HTML file
+gtsave(table1, here("outputs/in_migration.html"))
+```
+
+Create pie chart:
+-   same residence in NYS
+-   different residence in NYS
+-   different residence outside of NYS
+-   total abroad
+```{r message = FALSE, warning = FALSE}
+tableSource <- s19_s23 %>% 
+  pivot_longer(!State) %>% 
+  rename(Year = name,
+         pop = value) %>% 
+  slice(1:20) %>% 
+  #filter(!(State %in% c("tot_pop", "tot_same_res"))) %>%
+  pivot_wider(names_from = State, values_from = pop) %>% 
+  select(Year, `Total Population` = tot_pop, 
+         `Same Residency` = tot_same_res,
+         `Within State Migration` = dif_res, 
+         `Migration from Out of State` = tot_dif_state, 
+         `Migration from Abroad` = 	tot_abroad) %>% 
+  gt() %>% 
+  tab_header(
+    title = "Sources of Migration Into New York State",
+    subtitle = "Within-State and Out-of-State migration to NYS 2019-2023."
+  )
+
+# Save as HTML file
+gtsave(tableSource, here("outputs/sourceIn_migration.html"))
+
+ss_pie <- s19_s23 %>% 
+  pivot_longer(!State) %>% 
+  rename(Year = name,
+         pop = value) %>% 
+  slice(1:20) %>% 
+  #filter(!(State %in% c("tot_pop", "tot_same_res"))) %>%
+  pivot_wider(names_from = State, values_from = pop) %>% 
+  mutate(perc_same = (tot_same_res/tot_pop)*100,
+         perc_dif_res = (dif_res/tot_pop)*100,
+         perc_dif_state = (tot_dif_state/tot_pop)*100,
+         perc_abroad = (tot_abroad/tot_pop)*100) %>% 
+  select(Year, `Same Residency` = perc_same, 
+         `Within State Migration` = perc_dif_res, 
+         `Migration from Out of State` = perc_dif_state, 
+         `Migration from Abroad` = perc_abroad) %>% 
+  pivot_longer(cols = 2:5,
+               names_to = "category",
+               values_to = "percent")
+
+pie23 <- ss_pie %>%   
+filter(Year %in% 2023) %>% 
+  ggplot(aes(x = "", y = percent, fill = category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +
+  labs(title = "Sources of Migration to NYS 2023",
+       fill = "") +
+  scale_fill_brewer(palette = "Set1") +
+   # Set the plot background to white
+  theme(
+    plot.background = element_rect(fill = "white")  # White background
+  ) +
+  ggrepel::geom_text_repel(aes(label = paste0(round(percent, 1), "%")), 
+                  size = 4, 
+                   position = position_stack(vjust = 0.4),
+                  #box.padding = 0.5,  # Adjust the space around the labels
+                  color = "white",    # Label color
+                  show.legend = FALSE)  # Hide legend for text
+
+# Save the plot to a file in the "output" folder
+ggsave(here("outputs/source_pie23.png"), plot = pie23, width = 8, height = 6, dpi = 300)
+
+pie22 <- ss_pie %>%   
+filter(Year %in% 2022) %>% 
+  ggplot(aes(x = "", y = percent, fill = category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +
+  labs(title = "Sources of Migration to NYS 2022",
+       fill = "") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(
+    plot.background = element_rect(fill = "white")  # White background
+  ) +
+  ggrepel::geom_text_repel(aes(label = paste0(round(percent, 1), "%")), 
+                  size = 4, 
+                   position = position_stack(vjust = 0.4),
+                  #box.padding = 0.5,  # Adjust the space around the labels
+                  color = "white",    # Label color
+                  show.legend = FALSE)  # Hide legend for text
+
+# Save the plot to a file in the "output" folder
+ggsave(here("outputs/source_pie22.png"), plot = pie22, width = 8, height = 6, dpi = 300)
+
+pie21 <- ss_pie %>%   
+filter(Year %in% 2021) %>% 
+  ggplot(aes(x = "", y = percent, fill = category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +
+  labs(title = "Sources of Migration to NYS 2021",
+       fill = "") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(
+    plot.background = element_rect(fill = "white")  # White background
+  ) +
+  ggrepel::geom_text_repel(aes(label = paste0(round(percent, 1), "%")), 
+                  size = 4, 
+                   position = position_stack(vjust = 0.4),
+                  #box.padding = 0.5,  # Adjust the space around the labels
+                  color = "white",    # Label color
+                  show.legend = FALSE)  # Hide legend for text
+
+# Save the plot to a file in the "output" folder
+ggsave(here("outputs/source_pie21.png"), plot = pie21, width = 8, height = 6, dpi = 300)
+
+
+pie19 <- ss_pie %>%   
+filter(Year %in% 2019) %>% 
+  ggplot(aes(x = "", y = percent, fill = category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +
+  labs(title = "Sources of Migration to NYS 2019",
+       fill = "") +
+   scale_fill_brewer(palette = "Set1") +
+  theme(
+    plot.background = element_rect(fill = "white")  # White background
+  ) +
+  ggrepel::geom_text_repel(aes(label = paste0(round(percent, 1), "%")), 
+                  size = 4, 
+                   position = position_stack(vjust = 0.4),
+                  #box.padding = 0.5,  # Adjust the space around the labels
+                  color = "white",    # Label color
+                  show.legend = FALSE)  # Hide legend for text
+
+
+# Save the plot to a file in the "output" folder
+ggsave(here("outputs/source_pie19.png"), plot = pie19, width = 8, height = 6, dpi = 300)
 
 ```
+
+
 
 ### Explore trends for state to state migration in 2023
 
@@ -204,7 +361,95 @@ s19_s23 %>%
 Out of NY to other states
 -   `new_prop` is a measure of the percent of the total population migrating to their current residence in 2023, that are from NYS.
 
-```{r}
+# Tables: Migration Out of New York State
+
+```{r message = FALSE, warning = FALSE}
+ss19 <- clean_df[[4]] %>% 
+  select(current_res, tot_pop, tot_dif_state, from_ny = `New York`, moe = MOE_75) %>% 
+  slice(-c(54:62)) %>% 
+  mutate(tot_dif_state = as.numeric(tot_dif_state),
+         tot_pop = as.numeric(tot_pop),
+         from_ny = as.numeric(from_ny),
+         moe = as.numeric(moe)) %>% 
+  arrange(-from_ny) %>% 
+  slice(2:6) %>% 
+  mutate(year = 2019)
+
+ss21 <- clean_df[[3]] %>% 
+  select(current_res, tot_pop, tot_dif_state, from_ny = `New York`, moe = MOE_75) %>% 
+  slice(-c(54:62)) %>% 
+  mutate(tot_dif_state = as.numeric(tot_dif_state),
+         tot_pop = as.numeric(tot_pop),
+         from_ny = as.numeric(from_ny),
+         moe = as.numeric(moe)) %>% 
+  arrange(-from_ny) %>% 
+  slice(2:6) %>% 
+  mutate(year = 2021)
+
+ss22 <- clean_df[[2]] %>% 
+  select(current_res, tot_pop, tot_dif_state, from_ny = `New York`, moe = MOE_75) %>% 
+  slice(-c(54:62)) %>% 
+  mutate(tot_dif_state = as.numeric(tot_dif_state),
+         tot_pop = as.numeric(tot_pop),
+         from_ny = as.numeric(from_ny),
+         moe = as.numeric(moe)) %>% 
+  arrange(-from_ny) %>% 
+  slice(2:6) %>% 
+  mutate(year = 2022)
+
+ss23 <- clean_df[[1]] %>% 
+  select(current_res, tot_pop, tot_dif_state, from_ny = `New York`, moe = `MOE (±)_75`) %>% 
+  slice(-c(54:62)) %>% 
+  mutate(tot_dif_state = as.numeric(tot_dif_state),
+         tot_pop = as.numeric(tot_pop),
+         from_ny = as.numeric(from_ny),
+         moe = as.numeric(moe)) %>% 
+  arrange(-from_ny) %>% 
+  slice(2:6) %>% 
+  mutate(year = 2023)
+
+ss19_23 <- rbind(ss19, ss21, ss22, ss23) %>% 
+  mutate(perc = round((from_ny/tot_dif_state)*100, 2))
+
+names <- c("Current Residence", "Total Population", "Total In Migration", "Migration From NYS", "MOE", "Year", "% From NYS")
+
+colnames(ss19_23) <- names
+
+ss_table <- ss19_23 %>% 
+  select(!c(Year,MOE)) 
+
+table2 <-gt(ss_table) %>% 
+  tab_header(
+    title = "Migration Out of New York State",
+    subtitle = "The top five states that people from NYS are migrating to 2019-2023."
+  ) %>%
+  tab_source_note(
+    source_note = "% From NYS: Refers to the percent of total in migration coming from NYS."
+  ) %>%
+  tab_row_group(
+    group = "2019",
+    rows = 1:5
+  ) %>% 
+  tab_row_group(
+    group = "2021",
+    rows = 6:10
+  ) %>% 
+  tab_row_group(
+    group = "2022",
+    rows = 11:15
+  ) %>% 
+  tab_row_group(
+    group = "2023",
+    rows = 16:20
+  )
+
+# Save as HTML file
+gtsave(table2, here("outputs/out_migration.html"))
+
+```
+
+
+```{r message = FALSE, warning = FALSE}
 out23 <- clean_df[[1]] %>% 
   select(1:9, "New York", 75) %>% 
   mutate(across(-1, as.numeric)) %>% 
@@ -264,7 +509,7 @@ out <- rbind(out19, out21, out22, out23)
 
 ```{r}
 
-ggplot(out, aes(x = year, y = ny_value, fill = current_res)) +
+ggplot(out, aes(x = reorder(year, ny_value), y = ny_value, fill = current_res)) +
   geom_col(position = "dodge")
 
 ggplot(out23 %>% 
@@ -303,7 +548,7 @@ ggplot(out19 %>%
          head(9), 
        aes(x = reorder(current_res, ny_value), y = ny_value/1000)) +
   geom_col() +
-  labs(title = "Where NYS residents are moving to 2021", 
+  labs(title = "Where NYS residents are moving to 2019", 
        x = "State", 
        y = "Persons (per 1000 people)") +
   theme_minimal()
@@ -373,6 +618,7 @@ sb_2023 %>%
   arrange(-pop) %>% 
   mutate(perc = round((pop/19571216)*100, 2))
 ```
+
 ```{r}
 list_df <- list(sb_2023, sb_2022, sb_2021, sb_2019)
 # Initialize an empty dataframe to hold the final combined result
@@ -392,20 +638,60 @@ for (a in 1:length(list_df)) {
     filter(!str_detect(state, "MOE")) %>% 
     mutate(pop = as.numeric(pop)) %>% 
     arrange(-pop) %>% 
-    mutate(perc = round((pop/19571216)*100, 2),
-           year = years[a])
+    mutate(year = years[a])
   
   # Bind the current data frame (d) into the final_df
   final_df <- bind_rows(final_df, d)
   
 }
 
-final_df %>%
-  group_by(year, state) %>% 
-  arrange(-pop) 
+birth_df <- final_df %>%
+  select(!current_res) %>% 
+  pivot_wider(names_from = state,
+              values_from = pop) 
+
+birth_df %>% 
+  pivot_longer(cols = 3:60,
+               names_to = "state",
+               values_to = "pop") %>% 
+  mutate(perc = round((pop/tot_pop)*100, 2)) %>% 
+  #group_by(year, state) %>% 
+  arrange(-perc)
   pivot_wider(names_from = year,
               values_from = c(pop, perc))
+```
 
+
+```{r}
+
+
+states_names <- colnames(birth_df)
+
+states_names <-states_names[5:60]
+
+filtered_states_data <- list()
+
+for (place in states_names) {
+  # Filter and process the data for each state
+  filtered_data <- list_df[[1]] %>%
+    filter(current_res == place) %>%  # Filter for the current state
+    pivot_longer(cols = 2:118,  # Adjust column range as needed
+                 names_to = "state", 
+                 values_to = "pop") %>%
+    filter(!str_detect(state, "MOE")) %>%  # Remove columns with "MOE" in the name
+    mutate(pop = as.numeric(pop)) %>%  # Convert population to numeric
+    arrange(-pop) %>%  # Sort by descending population
+    pivot_wider(names_from = state,
+                values_from = pop) %>% 
+    pivot_longer(cols = 3:60,
+                 names_to = "state",
+                 values_to = "pop") %>% 
+    mutate(perc = round((pop/tot_pop)*100, 2)) %>% 
+    filter(state %in% place)
+  
+  # Store the filtered data in the list using the state name as the list key
+  filtered_states_data[[place]] <- filtered_data
+}
 ```
 
 
