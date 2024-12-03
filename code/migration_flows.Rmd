@@ -23,7 +23,7 @@ ss_23 <- read_xlsx(here("data", "state_to_state_migration/2023.xlsx"), skip = 4)
          dif_res = 6, # different residence / same state as 1 year ago
          tot_dif_state = 8 # different state as 1 year ago
          ) %>% 
-  slice(-1)
+  #slice(-1)
 
 # I had to clean this data before I imported it because it had lots of messy tabls that did not download well
 ss_22 <- read_xlsx(here("data", "state_to_state_migration/2022.xlsx"), skip = 4) %>% 
@@ -55,6 +55,100 @@ ss_19 <- read_xlsx(here("data", "state_to_state_migration/2019.xlsx"), skip = 4)
 #filter(rowSums(is.na(ss_22)) != ncol(ss_22))
 ```
 
+```{r}
+# Directory where the Excel files are stored
+file_dir <- here("data", "state_to_state_migration")
+
+# List all Excel files in the directory
+files <- list.files(file_dir, pattern = "*.xlsx", full.names = TRUE)
+
+# Define a function to process each file
+process_file <- function(file_path) {
+  # Extract year from the file name (assuming year is in the filename)
+  year <- sub(".*([0-9]{4}).xlsx", "\\1", basename(file_path))
+  
+  # Read and process the data
+  df <- read_xlsx(file_path, skip = 4) %>%
+    rename(current_res = 1,
+         tot_pop = 2,
+         tot_same_res = 4, # same residence as 1 year ago
+         dif_res = 6, # different residence / same state as 1 year ago
+         tot_dif_state = 8 # different state as 1 year ago
+         )  # different state as 1 year ago
+    
+  
+  # Create the column names from the state row
+  for (i in seq(10, ncol(df), by = 2)) {
+    if (i <= ncol(df)) {  # Ensure we don't go beyond the number of columns
+      col_name <- as.character(df[1, i])  # Get the value from row 1 of the ith column
+      colnames(df)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  # Create the column names from the state row
+  for (i in seq(3, ncol(df), by = 2)) {
+    if (i <= ncol(df)) {  # Ensure we don't go beyond the number of columns
+      col_name <- paste0(as.character(df[2, i]), "_", i)  # Get the value from row 1 of the ith column
+      colnames(df)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  df <- df %>%
+    filter(rowSums(is.na(.)) != ncol(.)) %>% 
+    slice(-c(1:2))  %>% 
+    rename(tot_abroad = Total) %>% 
+    mutate_at(vars(-1), as.numeric)
+  
+  
+  # Dynamically assign the processed dataframe to a variable named sb_<year>
+  assign(paste0("migration_", year), df, envir = .GlobalEnv)
+}
+
+# Apply the function to all files in the folder
+lapply(files, process_file)
+```
+
+Something was weird for 2023 so I had to do it separately:
+```{r}
+# Read and process the data
+  df <- read_xlsx(here("data", "state_to_state_migration", "2023.xlsx"), skip = 4) %>%
+    rename(current_res = 1,
+         tot_pop = 2,
+         tot_same_res = 4, # same residence as 1 year ago
+         dif_res = 6, # different residence / same state as 1 year ago
+         tot_dif_state = 8 # different state as 1 year ago
+         ) %>%  # different state as 1 year ago
+  slice(-1)
+    
+  
+  # Create the column names from the state row
+  for (i in seq(10, ncol(df), by = 2)) {
+    if (i <= ncol(df)) {  # Ensure we don't go beyond the number of columns
+      col_name <- as.character(df[1, i])  # Get the value from row 1 of the ith column
+      colnames(df)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  # Create the column names from the state row
+  for (i in seq(3, ncol(df), by = 2)) {
+    if (i <= ncol(df)) {  # Ensure we don't go beyond the number of columns
+      col_name <- paste0(as.character(df[2, i]), "_", i)  # Get the value from row 1 of the ith column
+      colnames(df)[i] <- col_name  # Set column name to that value
+    }
+  }
+  
+  df <- df %>%
+    filter(rowSums(is.na(.)) != ncol(.)) %>%
+    slice(-c(1:2))  %>%
+    rename(tot_abroad = Total) %>% 
+    mutate_at(vars(-1), as.numeric)
+  
+    
+  clean_df[[8]] <- df
+  
+  # Dynamically assign the processed dataframe to a variable named sb_<year>
+  assign(paste0("migration_", 2023), df, envir = .GlobalEnv)
+```
 
 ## State to state migration
 
@@ -68,7 +162,7 @@ Into NY from Abroad
 list_df <- list(ss_23, ss_22, ss_21, ss_19)
 clean_df <- list()
 
-for (a in 1:length(list_df)) {
+for (a in 1:length(clean_df)) {
   
   d <- list_df[[a]]
   
@@ -91,7 +185,8 @@ for (a in 1:length(list_df)) {
   d <- d %>%
     filter(rowSums(is.na(.)) != ncol(.)) %>% 
     slice(-c(1:2))  %>% 
-    rename(tot_abroad = Total)
+    rename(tot_abroad = Total) %>% 
+    mutate_at(vars(-1), as.numeric)
   
     
   clean_df[[a]] <- d
@@ -107,8 +202,9 @@ for (a in 1:length(clean_df)) {
 
 in_migration <- d %>% 
   filter(current_res == "New York") %>%
-    pivot_longer(cols = 1:length(d),
-                 names_to = "state")
+    pivot_longer(cols = 2:length(d),
+                 names_to = "state") %>% 
+  select(!current_res)
   
   MOE <- in_migration %>%
     filter(str_detect(state, "MOE")) %>%
@@ -119,9 +215,7 @@ in_migration <- d %>%
     filter(!str_detect(state, "MOE")) %>%
     filter(!str_detect(state, "current_res")) %>%
     cbind(MOE) %>%
-    select(!stat) %>%
-    mutate(value = as.numeric(value),
-           moe = as.numeric(moe))
+    select(!stat)
   
   in_df[[a]] <- in_migration
 }
@@ -129,23 +223,19 @@ in_migration <- d %>%
 s23 <- in_df[[1]]%>% 
   rename(value_23 = value,
          moe_23 = moe) %>% 
-  arrange(-value_23) %>% 
-  slice(1:11)
+  arrange(-value_23)
 s22 <- in_df[[2]] %>% 
   rename(value_22 = value,
          moe_22 = moe) %>% 
-  arrange(-value_22) %>% 
-  slice(1:11)
+  arrange(-value_22)
 s21 <- in_df[[3]] %>% 
   rename(value_21= value,
          moe_21 = moe) %>% 
-  arrange(-value_21) %>% 
-  slice(1:11)
+  arrange(-value_21)
 s19 <- in_df[[4]] %>% 
   rename(value_19 = value,
          moe_19 = moe) %>% 
-  arrange(-value_19) %>% 
-  slice(1:11)
+  arrange(-value_19)
 
 
 s19_s23 <- s23 %>% 
@@ -163,9 +253,111 @@ table1 <- gt(s19_s23 %>%
     subtitle = "The top five states that people are moving from to NYS 2019-2023."
   )
 
+s19_s23 %>% 
+     slice(6:11) %>% 
+  pivot_longer(!State) %>% 
+  mutate(name = as.numeric(name)) %>% 
+  group_by(State) %>% 
+   do(model = lm(value ~ name, data = .)) %>%   # Run linear model for each state
+  summarise(
+    state = State,
+    p_value = summary(model)$coefficients[2, 4],  # Extract p-value for the year coefficient
+    estimate = summary(model)$coefficients[2, 1]  # Extract estimate (slope)
+  )
+
 # Save as HTML file
 gtsave(table1, here("outputs/in_migration.html"))
 ```
+
+## Total in/out migration migration (including Puerto Rico)
+```{r}
+## testing extracting in and out 
+total_in <- clean_df[[1]] %>% 
+  filter(current_res %in% "New York") %>% 
+  select(-matches("MOE")) %>% 
+  mutate(tot_in = tot_dif_state + tot_abroad + `Puerto Rico`,
+         year = 2023) %>% 
+  select(year, tot_in)
+
+total_out <- clean_df[[1]] %>% 
+  select(current_res, `New York`) %>% 
+  slice(-c(54:63)) %>% 
+  pivot_wider(names_from = current_res,
+              values_from = `New York`) %>% 
+  mutate(tot_out = rowSums(select(., 2:53), na.rm = TRUE),
+         year = 2023) %>% 
+  select(year, tot_out)
+
+net_migration <- total_in %>% 
+  left_join(total_out, by = "year")
+```
+
+# Table 1: Total in and out migration 
+```{r}
+# creating loop to iterate over each year 
+
+# clean the df for assessing internal migration
+years <- seq(from = 2015, to = 2023, by = 1)
+years <- setdiff(years, 2020)
+
+# Use lapply to collect all the data frames into a list
+clean_df <- lapply(years, function(year) {
+  # Get the data frame for the year dynamically
+  get(paste0("migration_", year))
+})
+
+net_df <- list()
+
+for (a in 1:length(clean_df)) {
+  
+  d <- clean_df[[a]]
+  
+  total_in <- d %>% 
+    filter(current_res %in% "New York") %>% 
+    select(-matches("MOE")) %>% 
+    mutate(tot_in = tot_dif_state + tot_abroad + `Puerto Rico`,
+           year = years[a]) %>% 
+    select(year, tot_pop, tot_in)
+  
+  total_out <- d %>% 
+    select(current_res, `New York`) %>% 
+    slice(-c(54:63)) %>% 
+    pivot_wider(names_from = current_res,
+                values_from = `New York`) %>% 
+    mutate(tot_out = rowSums(select(., 2:53), na.rm = TRUE),
+           year = years[a]) %>% 
+    select(year, tot_out)
+  
+  net_migration <- total_in %>% 
+    left_join(total_out, by = "year")
+  
+  net_df[[a]] <- net_migration
+}
+
+net_migration <- bind_rows(net_df) %>% 
+  mutate(net = tot_in - tot_out,
+         net_perc = ((tot_in - tot_out)/tot_pop)*100) %>% 
+  arrange(year)
+
+net_migration$percentage_change <- NA  # Initialize a column for percentage change
+
+# Loop over rows starting from the second row (skip the first year)
+for (i in 2:nrow(net_migration)) {  # Start from the second row (2022)
+  # Calculate the percentage change based on the previous row's value
+  net_migration$percentage_change[i] <- ((net_migration$net_perc[i] - net_migration$net_perc[i-1]) / net_migration$net_perc[i-1]) * 100
+}
+
+```
+
+
+## Changes between 2022 and 2023
+```{r}
+s19_s23 %>% 
+  mutate(pop_change = `2023`-`2022`) %>% 
+  arrange(-abs(pop_change))
+```
+
+
 
 Create pie chart:
 -   same residence in NYS
@@ -173,7 +365,7 @@ Create pie chart:
 -   different residence outside of NYS
 -   total abroad
 ```{r message = FALSE, warning = FALSE}
-tableSource <- s19_s23 %>% 
+source_df <- s19_s23 %>% 
   pivot_longer(!State) %>% 
   rename(Year = name,
          pop = value) %>% 
@@ -185,6 +377,14 @@ tableSource <- s19_s23 %>%
          `Within State Migration` = dif_res, 
          `Migration from Out of State` = tot_dif_state, 
          `Migration from Abroad` = 	tot_abroad) %>% 
+  mutate(Year = as.numeric(Year),
+         tot = `Same Residency` + `Within State Migration` + `Migration from Out of State` + `Migration from Abroad`)
+
+# significance tests
+lm(`Within State Migration` ~ Year, data = source_df) %>% 
+  summary()
+
+tableSource <- source_df %>% 
   gt() %>% 
   tab_header(
     title = "Sources of Migration Into New York State",
@@ -656,22 +856,29 @@ birth_df %>%
                values_to = "pop") %>% 
   mutate(perc = round((pop/tot_pop)*100, 2)) %>% 
   #group_by(year, state) %>% 
-  arrange(-perc)
-  pivot_wider(names_from = year,
-              values_from = c(pop, perc))
+  arrange(-perc) %>% 
+  select(!tot_pop)
 ```
 
+## What percentage of people are born in the state that they are currently residing in?
 
-```{r}
-
+tot_pop = total population of state
+pop = population where birthplace is the same as that state
+```{r }
+s <- list_df[[1]]$current_res
 
 states_names <- colnames(birth_df)
 
-states_names <-states_names[5:60]
+states_names <- intersect(s, states_names)
+
+#states_names <-states_names[5:60]
+
 
 filtered_states_data <- list()
 
 for (place in states_names) {
+  
+  print(place)
   # Filter and process the data for each state
   filtered_data <- list_df[[1]] %>%
     filter(current_res == place) %>%  # Filter for the current state
@@ -692,6 +899,8 @@ for (place in states_names) {
   # Store the filtered data in the list using the state name as the list key
   filtered_states_data[[place]] <- filtered_data
 }
+
+local_df <- bind_rows(filtered_states_data)
 ```
 
 
