@@ -237,36 +237,6 @@ s19 <- in_df[[4]] %>%
          moe_19 = moe) %>% 
   arrange(-value_19)
 
-
-s19_s23 <- s23 %>% 
-  left_join(s22, by = "state") %>% 
-  left_join(s21, by = "state") %>% 
-  left_join(s19, by = "state") %>% 
-  select(-which(grepl("moe", colnames(.), ignore.case = TRUE)))
-
-colnames(s19_s23) <- c("State", 2023, 2022, 2021, 2019)
-
-table1 <- gt(s19_s23 %>% 
-     slice(6:11)) %>% 
-  tab_header(
-    title = "Migration Into New York State",
-    subtitle = "The top five states that people are moving from to NYS 2019-2023."
-  )
-
-s19_s23 %>% 
-     slice(6:11) %>% 
-  pivot_longer(!State) %>% 
-  mutate(name = as.numeric(name)) %>% 
-  group_by(State) %>% 
-   do(model = lm(value ~ name, data = .)) %>%   # Run linear model for each state
-  summarise(
-    state = State,
-    p_value = summary(model)$coefficients[2, 4],  # Extract p-value for the year coefficient
-    estimate = summary(model)$coefficients[2, 1]  # Extract estimate (slope)
-  )
-
-# Save as HTML file
-gtsave(table1, here("outputs/in_migration.html"))
 ```
 
 ## Total in/out migration migration (including Puerto Rico)
@@ -344,9 +314,80 @@ net_migration$percentage_change <- NA  # Initialize a column for percentage chan
 # Loop over rows starting from the second row (skip the first year)
 for (i in 2:nrow(net_migration)) {  # Start from the second row (2022)
   # Calculate the percentage change based on the previous row's value
-  net_migration$percentage_change[i] <- ((net_migration$net_perc[i] - net_migration$net_perc[i-1]) / net_migration$net_perc[i-1]) * 100
+  net_migration$percentage_change[i] <- round(((net_migration$net[i] - net_migration$net[i-1]) / net_migration$net[i-1]) * 100, 2)
 }
 
+```
+
+## Time trend Graphs
+
+```{r}
+net_migration %>% 
+  select(year, tot_in, tot_out) %>% 
+  pivot_longer(cols = 2:3,
+               names_to = "flow",
+               values_to = "pop") %>% 
+  ggplot(aes(x = year, 
+             y = pop/1000,
+             color = flow)) +
+  geom_line() +
+  labs(y = "Population (per 1000)",
+       x = "Year",
+       color = "") +
+  scale_x_continuous(
+    breaks = unique(net_migration$year),   # Explicitly set breaks for each year
+    labels = as.character(unique(net_migration$year))  # Show years as labels
+  ) +
+  theme_classic()
+
+
+net_migration %>% 
+  select(year, net) %>%
+  ggplot(aes(x = year, 
+             y = net/1000)) +
+  geom_col() +
+   labs(y = "Population (per 1000)",
+       x = "Year",
+       color = "") +
+   scale_x_continuous(
+    breaks = unique(net_migration$year),   # Explicitly set breaks for each year
+    labels = as.character(unique(net_migration$year))  # Show years as labels
+  ) +
+  theme_minimal()
+```
+
+
+# Table 2: Top 5 sources for in-migration to NY
+```{r}
+s19_s23 <- s23 %>% 
+  left_join(s22, by = "state") %>% 
+  left_join(s21, by = "state") %>% 
+  left_join(s19, by = "state") %>% 
+  select(-which(grepl("moe", colnames(.), ignore.case = TRUE)))
+
+colnames(s19_s23) <- c("State", 2023, 2022, 2021, 2019)
+
+table1 <- gt(s19_s23 %>% 
+     slice(6:11)) %>% 
+  tab_header(
+    title = "Migration Into New York State",
+    subtitle = "The top five states that people are moving from to NYS 2019-2023."
+  )
+
+s19_s23 %>% 
+     slice(6:11) %>% 
+  pivot_longer(!State) %>% 
+  mutate(name = as.numeric(name)) %>% 
+  group_by(State) %>% 
+   do(model = lm(value ~ name, data = .)) %>%   # Run linear model for each state
+  summarise(
+    state = State,
+    p_value = summary(model)$coefficients[2, 4],  # Extract p-value for the year coefficient
+    estimate = summary(model)$coefficients[2, 1]  # Extract estimate (slope)
+  )
+
+# Save as HTML file
+gtsave(table1, here("outputs/in_migration.html"))
 ```
 
 
@@ -561,7 +602,8 @@ s19_s23 %>%
 Out of NY to other states
 -   `new_prop` is a measure of the percent of the total population migrating to their current residence in 2023, that are from NYS.
 
-# Tables: Migration Out of New York State
+
+# Table 3: Top 5 destination for out-migration from NY
 
 ```{r message = FALSE, warning = FALSE}
 ss19 <- clean_df[[4]] %>% 
