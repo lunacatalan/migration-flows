@@ -55,6 +55,7 @@ ss_19 <- read_xlsx(here("data", "state_to_state_migration/2019.xlsx"), skip = 4)
 #filter(rowSums(is.na(ss_22)) != ncol(ss_22))
 ```
 
+Only does 2015-022
 ```{r}
 # Directory where the Excel files are stored
 file_dir <- here("data", "state_to_state_migration")
@@ -317,12 +318,36 @@ for (i in 2:nrow(net_migration)) {  # Start from the second row (2022)
   net_migration$percentage_change[i] <- round(((net_migration$net[i] - net_migration$net[i-1]) / net_migration$net[i-1]) * 100, 2)
 }
 
+#colnames(net_migration) <- c("Year", "Total Population", "In", "Out", "Net Movement", "Net Percent", "Year-to-Year Change in Net Movement")
+
+net_migration_table <- gt(net_migration) %>% 
+   tab_header(
+    title = "Total In and Out Migration",
+    subtitle = "Net migration to and from New York Sate 2015-2023."
+  ) %>% 
+  cols_label(
+    year = "Year",
+    tot_pop = "Total Population",
+    tot_in = "In",
+    tot_out = "Out",
+    net = "Net Movement", 
+    net_perc = "Net Percent",
+    percentage_change = "Year-to-Year Change in Net Movement"
+  ) %>% 
+  tab_source_note(
+    source_note = md("**Table 1: Total migration of peolpe in and out of NYS, and the year to year change in net movement.** Negative values indicate that there was a decrease in the net number of people migrating in the current year compared to the previous year. Positive values indicate there was an increase in the net number of people migrating in the current year compared to the previous year.")
+  )
+
+write.csv(net_migration_table, here("outputs", "net_migration.csv"), row.names = FALSE)
+# Save the table as an HTML file first
+gtsave(net_migration_table, here("outputs", "net_migration_table.html"))
+
 ```
 
 ## Time trend Graphs
 
 ```{r}
-net_migration %>% 
+graph1 <- net_migration %>% 
   select(year, tot_in, tot_out) %>% 
   pivot_longer(cols = 2:3,
                names_to = "flow",
@@ -331,29 +356,47 @@ net_migration %>%
              y = pop/1000,
              color = flow)) +
   geom_line() +
+  geom_line(size = 1.5) +
+  scale_color_manual(values = c("tot_in" = "#0E3B43", "tot_out" = "#B3B240"),
+                     labels = c("tot_in" = "In-Migration", "tot_out" = "Out-Migration")) +  # Update legend labels
   labs(y = "Population (per 1000)",
        x = "Year",
-       color = "") +
+       color = "",
+       title = "Migration In and Out of New York State",
+       caption = str_wrap("Graph 1: Time trends for migration of people in and out of NYS between 2015 and 2023. The spike between 2019 and 2021 follows the trends seen during the COVID pandemic.")) +
   scale_x_continuous(
     breaks = unique(net_migration$year),   # Explicitly set breaks for each year
     labels = as.character(unique(net_migration$year))  # Show years as labels
   ) +
-  theme_classic()
+  theme_classic() +
+  theme(
+    plot.caption = element_text(size = 10, hjust = 0, lineheight = 1.2),  # Adjust font size and line height
+    plot.margin = margin(10, 10, 20, 10)  # Add margin space around the plot
+  )
 
+ggsave(here("outputs", "timeTrend_migration.png"), plot = graph1, width = 10, height = 6, dpi = 300)
 
-net_migration %>% 
+graph2 <- net_migration %>% 
   select(year, net) %>%
   ggplot(aes(x = year, 
              y = net/1000)) +
-  geom_col() +
+  geom_col(fill = "#606C38") +
    labs(y = "Population (per 1000)",
        x = "Year",
-       color = "") +
+       color = "",
+       title = "Net Migration to and from New York State",
+       caption = str_wrap("Graph 2: Time trends for net migration of people in and out of NYS between 2015 and 2023. Negative values in each year indicate that every year from 2015-2023, more people are migrating out of NYS than migrating in.")) +
    scale_x_continuous(
     breaks = unique(net_migration$year),   # Explicitly set breaks for each year
     labels = as.character(unique(net_migration$year))  # Show years as labels
   ) +
-  theme_minimal()
+  theme_classic() +
+  theme(
+    plot.caption = element_text(size = 10, hjust = 0, lineheight = 1.2),  # Adjust font size and line height
+    plot.margin = margin(10, 10, 20, 10)  # Add margin space around the plot
+  )
+
+ggsave(here("outputs", "timeTrend_net.png"), plot = graph2, width = 10, height = 6, dpi = 300)
 ```
 
 
@@ -367,31 +410,53 @@ s19_s23 <- s23 %>%
 
 colnames(s19_s23) <- c("State", 2023, 2022, 2021, 2019)
 
-table1 <- gt(s19_s23 %>% 
-     slice(6:11)) %>% 
+in_migration <- s19_s23 %>% 
+     slice(6:11)
+in_table <- gt(in_migration) %>% 
   tab_header(
     title = "Migration Into New York State",
     subtitle = "The top five states that people are moving from to NYS 2019-2023."
+  )  %>% 
+  tab_source_note(
+    source_note = md("**Table 2: Top 5 states and foreign migration into New York State from 2019-2023.** For each year, the top source was from foreign countries. The top 5 states migrating to NYS were New Jersey, California, Pennsylvania, Florida, Massachusetts.")
   )
 
-s19_s23 %>% 
-     slice(6:11) %>% 
-  pivot_longer(!State) %>% 
-  mutate(name = as.numeric(name)) %>% 
-  group_by(State) %>% 
-   do(model = lm(value ~ name, data = .)) %>%   # Run linear model for each state
-  summarise(
-    state = State,
-    p_value = summary(model)$coefficients[2, 4],  # Extract p-value for the year coefficient
-    estimate = summary(model)$coefficients[2, 1]  # Extract estimate (slope)
-  )
+in_table
 
+write.csv(in_table, here("outputs", "in_migration.csv"), row.names = FALSE)
 # Save as HTML file
 gtsave(table1, here("outputs/in_migration.html"))
 ```
 
 
-## Changes between 2022 and 2023
+## Graph 3: In Migration
+```{r}
+
+state_in <- s19_s23 %>% 
+     slice(6:11) %>% 
+  pivot_longer(!State) %>% 
+  rename(year = name, 
+         pop = value) %>% 
+  ggplot(aes(x = year, y = pop/1000, fill = reorder(State, pop))) +
+  geom_col(position = "dodge") +
+  labs(title = "Top Sources of Migration Into New York State", 
+       x = "Year", 
+       y = "Persons (per 1000 people)",
+       fill = "Source",
+       caption = str_wrap("Graph 3: Top sources of migration into NYS from 2019-2023.")) +
+  viridis::scale_fill_viridis(discrete = TRUE) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_classic() +
+  theme(
+    plot.caption = element_text(size = 10, hjust = 0, lineheight = 1.2),  # Adjust font size and line height
+    plot.margin = margin(10, 10, 20, 10)  # Add margin space around the plot
+  )
+
+ggsave(here("outputs", "stateIn_migration.png"), plot = state_in, width = 10, height = 6, dpi = 300)
+```
+
+
+### Changes between 2022 and 2023
 ```{r}
 s19_s23 %>% 
   mutate(pop_change = `2023`-`2022`) %>% 
@@ -657,10 +722,10 @@ names <- c("Current Residence", "Total Population", "Total In Migration", "Migra
 
 colnames(ss19_23) <- names
 
-ss_table <- ss19_23 %>% 
+out_table <- ss19_23 %>% 
   select(!c(Year,MOE)) 
 
-table2 <-gt(ss_table) %>% 
+gt(out_table) %>% 
   tab_header(
     title = "Migration Out of New York State",
     subtitle = "The top five states that people from NYS are migrating to 2019-2023."
@@ -683,12 +748,51 @@ table2 <-gt(ss_table) %>%
   tab_row_group(
     group = "2023",
     rows = 16:20
+  ) %>% 
+  cols_label(
+    `Current Residence` = "Destination"
+  ) %>% 
+  tab_source_note(
+    source_note = md("**Table 3: Top 5 desitnations for out-migration from New York State 2019-2023.** For each year, the top source was from foreign countries. The top 5 states migrating to NYS were New Jersey, California, Pennsylvania, Florida, Massachusetts.")
   )
 
+write.csv(out_table, here("outputs", "out_migration.csv"), row.names = FALSE)
+# Save as HTML file
 # Save as HTML file
 gtsave(table2, here("outputs/out_migration.html"))
 
 ```
+
+## Graph 4
+```{r }
+state_out <- ss19_23 %>% 
+  select(-c(MOE, `Total Population`)) %>% 
+  rename(Destination = `Current Residence`) %>% 
+  ggplot(aes(x = Year, y = `Migration From NYS`/1000, fill = reorder(Destination, `Migration From NYS`)))+
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(round(`% From NYS`, 0), "%")),  # Add labels above the bars
+            position = position_dodge(width = 0.8), vjust = -0.5, size = 3) +
+  labs(title = "Top Destinations of Out-Migration From New York State", 
+       x = "Year", 
+       y = "Persons (per 1000 people)",
+       fill = "",
+       caption = str_wrap("Graph 3: Top Destinations from NYS 2019-2023. The percentages show the contribution of total migration to that state that are from New York State. NYS consistently makes up the most of the migration to Connecticut and New Jersey.")) +
+  paletteer::scale_fill_paletteer_d("colorblindr::OkabeIto") +
+  scale_x_continuous(breaks = c(2019, 2021, 2022, 2023)) +
+  scale_y_continuous(expand = c(0, 0),
+                     limits = c(0, 100)) +
+  theme_classic() +
+  theme(
+    plot.caption = element_text(size = 10, hjust = 0, lineheight = 1.2),  # Adjust font size and line height
+    plot.margin = margin(25, 15, 25, 15),  # Further increase top margin to provide room for labels
+    plot.title = element_text(margin = margin(b = 30))
+  )
+
+state_out
+ggsave(here("outputs", "stateOut_migration.png"), plot = state_out, width = 10, height = 6, dpi = 300)
+
+```
+
 
 
 ```{r message = FALSE, warning = FALSE}
@@ -796,7 +900,7 @@ ggplot(out19 %>%
   theme_minimal()
 ```
 
-## State of residence by birthplace
+# State of residence by birthplace
 
 ### Read in the data files and clean them
 ```{r}
