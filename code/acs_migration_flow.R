@@ -125,11 +125,21 @@ migration23 %>%
 # Age distribution 
 
 age_mig <- mig %>% 
-  select(year, moved_flag, agep) %>% 
+  select(year, moved_flag, pwgtp, agep) %>% 
   filter(moved_flag == 1) %>% 
   uncount(pwgtp)
 
-ggplot() +
+age_plot <- age_mig %>% 
+  ggplot(aes(x = agep)) +
+  geom_histogram(fill = "#f6871f") +
+  facet_wrap(~year, nrow = 3) +
+  pru_theme() +
+  labs(title = "Distribution of Age of In-Migrants to NYC",
+       x = "Age",
+       y = "Count")
+
+ggsave(here("outputs", "age_dist_plot.png"), plot = age_plot, width = 5, height = 3, dpi = 300)
+
   
 # Race / Ethnicity 
 eth_mig <- mig %>% 
