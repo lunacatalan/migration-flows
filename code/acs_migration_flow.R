@@ -199,7 +199,7 @@ migsp_mapping <- data.frame(
                     "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming", "Puerto Rico", 
                     "France", "Germany", "Northern Europe, \nNot Specified", "Eastern Europe, Not Specified", 
                     "Western Europe or \nOther Europe, \nNot Specified", "Italy", "Spain", "United Kingdom, Excluding England", 
-                    "England", "Russia", "Ukraine", "Afghanistan", "China, Hong Kong, \nMacau And Paracel Islands", 
+                    "England", "Russia", "Ukraine", "Afghanistan", "China, Hong Kong, Macau And Paracel Islands", 
                     "India", "Israel", "Japan", "Korea", "Nepal", "Pakistan", "Philippines", "Saudi Arabia", "Taiwan", 
                     "Thailand", "Turkey", "United Arab Emirates", "Vietnam", "Eastern Asia, Not Specified", 
                     "Western Asia, Not Specified", "South Central Asia or Asia, Not Specified", "Canada", "Mexico", 
@@ -270,5 +270,5 @@ top10_22<- ggplot(top10) +
   pru_theme() +
   theme(axis.text.y = element_blank())
 
-ggsave(here("outputs", "source_in_plot.png"), plot = top10_22, width = 5, height = 3, dpi = 300)
+ggsave(here("outputs", "source_in_plot.png"), plot = top10_22, width = 6, height = 4, dpi = 300)
 
