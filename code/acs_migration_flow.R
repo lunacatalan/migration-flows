@@ -46,7 +46,8 @@ library(tidycensus)
 #   0 Did not move in the last year
 #   1 Changes residence from outside to NYS in the last year
 
-
+# path to the raw file
+source("https://raw.githubusercontent.com/lunacatalan/gecko-plots/refs/heads/main/R/pru_plots.R")
 source("C:/Users/lcatalan/OneDrive - NYC OTI/Documents/dev/gecko-plots/R/pru_plots.R")
 
 acs22 <- read_csv("Z:/0-Source Data/ACS/2022/2022_ACS_NYC.csv")
