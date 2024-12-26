@@ -122,6 +122,15 @@ migration23 %>%
        y = "Count")
 
   
+# Age distribution 
+
+age_mig <- mig %>% 
+  select(year, moved_flag, agep) %>% 
+  filter(moved_flag == 1) %>% 
+  uncount(pwgtp)
+
+ggplot() +
+  
 # Race / Ethnicity 
 eth_mig <- mig %>% 
   filter(moved_flag == 1) %>% 
