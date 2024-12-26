@@ -47,48 +47,100 @@ library(tidycensus)
 #   1 Changes residence from outside to NYS in the last year
 
 
+### Read in Data
 source("C:/Users/lcatalan/OneDrive - NYC OTI/Documents/dev/gecko-plots/R/pru_plots.R")
 
+acs18 <- read_csv("Z:/0-Source Data/ACS/2018/2018_ACS_NYC.csv") %>% 
+  mutate(YEAR = 2018)
+acs19 <- read_csv("Z:/0-Source Data/ACS/2019/2019_ACS_NYC.csv")
+acs21 <- read_csv("Z:/0-Source Data/ACS/2021/2021_ACS_NYC.csv")
 acs22 <- read_csv("Z:/0-Source Data/ACS/2022/2022_ACS_NYC.csv")
+acs23 <- read_csv("Z:/0-Source Data/ACS/2023/2023_ACS_NYC.csv") %>% 
+  rename(ST = STATE)
 acs_5yr_18_22 <- read_csv("Z:/0-Source Data/ACS/5_year_data/2018-2022/AH_5yr_withStdVars/2018_2022_5yrACS_StdVars.csv")
 
+### Create migration df to identify who moved to nyc
+acs <- list(acs18, acs19, acs21, acs22, acs23)
+years <- c(18, 19, 21, 22, 23)
 
-migration22 <- acs22 %>% 
-  #select(-896) %>% 
-  rename_with(tolower) %>% # make column names lowercase
-  mutate(current_res = 36) %>% 
-  select(1:13, # age
-         current_res, migsp, migpuma, fmigsp, # migration
-         powpuma, powsp, # working
-         rac1p, rac2p, rac3p, racaian, racasn, racblk, racnh, racnum, racpi, racwht # race/ethnicity
-         ) %>% 
-  # checked the ratio of NAs to see if it matches the % that had the same residency
-  #filter(is.na(migsp)) 
-  mutate(migsp_new = ifelse(is.na(migsp) == TRUE,
-                            36,
-                            migsp),
-         moved_flag = ifelse(migsp_new == current_res, 
-                             0, 
-                             1))
+for (i in 1:length(acs)) {
+  
+  df <- acs[[i]] %>% 
+    rename_with(tolower) %>% # make column names lowercase
+    mutate(current_res = 36) %>% 
+    select(serialno, year, puma, st, adjinc, pwgtp, cit,
+           agep, # age
+           current_res, migsp, migpuma, fmigsp, # migration
+           powpuma, powsp, # working
+           rac1p, rac2p, rac3p, racaian, racasn, racblk, racnh, racnum, racpi, racwht # race/ethnicity
+    ) %>% 
+    # checked the ratio of NAs to see if it matches the % that had the same residency
+    #filter(is.na(migsp)) 
+    mutate(migsp_new = ifelse(is.na(migsp) == TRUE,
+                              36,
+                              migsp),
+           moved_flag = ifelse(migsp_new == current_res, 
+                               0, 
+                               1))
+  
+  assign(paste0("mig", years[i]), df)
+}
+
+mig <- rbind(mig18, mig19, mig21, mig22, mig23)
 
 #########################
 # Who is moving to NYC?
 #########################
 
-# Age Distribution 
+# Age Distribution 2022
 
-move22 <- migration22 %>% 
+move22 <- mig22 %>% 
   filter(moved_flag == 1) %>% 
   uncount(pwgtp) # is there another way to apply weights?
 
 ggplot(move22, aes(x = agep)) +
   geom_histogram(fill = "#f6871f") +
   pru_theme() +
-  labs(title = "Distribution of Age of People Moving to NYC",
+  labs(title = "Distribution of Age of People Moving to NYC 2022",
        x = "Age",
        y = "Count")
 
+# Age Distribution 2023
+migration23 %>% 
+  filter(moved_flag == 1) %>% 
+  uncount(pwgtp) %>% 
+  ggplot(aes(x = agep)) +
+  geom_histogram(fill = "#f6871f") +
+  pru_theme() +
+  labs(title = "Distribution of Age of People Moving to NYC 2023",
+       x = "Age",
+       y = "Count")
+
+  
 # Race / Ethnicity 
+eth_mig <- mig %>% 
+  filter(moved_flag == 1) %>% 
+  uncount(pwgtp) %>% 
+  select(year, racaian, racasn, racblk, racnh, racpi, racwht) %>% 
+  group_by(year) %>% 
+  summarize(across(c(racaian, racasn, racblk, racnh, racpi, racwht), 
+                   sum, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(!year) %>% 
+  rename(ethnicity = name,
+         count = value)
+
+eth_in_plot <- eth_mig %>% 
+  ggplot(aes(x = ethnicity, y = count/1000, fill = factor(year))) +
+  geom_col(position = "dodge") +
+  labs(title = "Race & Ethnicity of In-Migrants to NYC 2018-2023",
+       x = "Ethnicity",
+       y = "People (in thousands)",
+       fill = "") +
+  pru_theme() +
+  pru_palette("dis6")
+
+ggsave(here("outputs", "eth_in_plot.png"), plot = eth_in_plot, width = 5, height = 3, dpi = 300)
 
 move22 %>% 
   #mutate(ct = row_number()) %>% 
@@ -102,7 +154,7 @@ move22 %>%
   geom_col() +
   labs(x = "Ethnicity",
        y = "People (in thousands)") +
-  pru_theme()
+  pru_theme() 
 
 # Race / Ethnicity Part 2
 
@@ -193,7 +245,7 @@ top10 <- domestic %>%
   rename(domestic = state_country.x,
          foreign = state_country.y)
 
-ggplot(top10) +
+top10_22<- ggplot(top10) +
   # Foreign bars (negative values)
   geom_col(aes(x = reorder(ct, -count.y), y = -count.y, fill = "Foreign"), show.legend = TRUE) + 
   # Domestic bars (positive values)
@@ -217,4 +269,6 @@ ggplot(top10) +
   coord_flip() + # Flip the axes if you want horizontal bars
   pru_theme() +
   theme(axis.text.y = element_blank())
+
+ggsave(here("outputs", "source_in_plot.png"), plot = top10_22, width = 5, height = 3, dpi = 300)
 
