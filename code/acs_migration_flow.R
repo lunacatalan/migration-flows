@@ -138,7 +138,7 @@ age_plot <- age_mig %>%
        x = "Age",
        y = "Count")
 
-ggsave(here("outputs", "age_dist_plot.png"), plot = age_plot, width = 5, height = 3, dpi = 300)
+ggsave(here("outputs", "age_dist_plot.png"), plot = age_plot, width = 5, height = 5, dpi = 300)
 
   
 # Race / Ethnicity 
