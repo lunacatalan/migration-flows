@@ -5,6 +5,10 @@ library(readxl)
 library(here)
 library(gt)
 library(tidycensus)
+library(ggridges)
+
+# STATE -
+# identifies the state where a resident currently lives
 
 # MIGPUMA - Migration PUMA based on 2020 Census definition 
 # identifies the geographic location where a respondent lived one year prior to the survey
@@ -46,52 +50,134 @@ library(tidycensus)
 #   0 Did not move in the last year
 #   1 Changes residence from outside to NYS in the last year
 
-<<<<<<< HEAD
+
 
 ### Read in Data
-=======
+
+# load the acs_function.R file from Anne
+source(here("code/acs_convenience_functions.r"))
+
 # path to the raw file
-source("https://raw.githubusercontent.com/lunacatalan/gecko-plots/refs/heads/main/R/pru_plots.R")
->>>>>>> e94a31a4d35e6c4b2a5e0de82fad53e3aa3e6d60
+# source("https://raw.githubusercontent.com/lunacatalan/gecko-plots/refs/heads/main/R/pru_plots.R")
+
 source("C:/Users/lcatalan/OneDrive - NYC OTI/Documents/dev/gecko-plots/R/pru_plots.R")
 
-acs18 <- read_csv("Z:/0-Source Data/ACS/2018/2018_ACS_NYC.csv") %>% 
+### Create 5yr ACS file for NYS
+
+### Read in the rds files created in code/acs_api_query.R
+acs18 <- readRDS(here("data/acs/migration_acs_allStates_2018.rds")) %>% 
   mutate(YEAR = 2018)
-acs19 <- read_csv("Z:/0-Source Data/ACS/2019/2019_ACS_NYC.csv")
-acs21 <- read_csv("Z:/0-Source Data/ACS/2021/2021_ACS_NYC.csv")
-acs22 <- read_csv("Z:/0-Source Data/ACS/2022/2022_ACS_NYC.csv")
-acs23 <- read_csv("Z:/0-Source Data/ACS/2023/2023_ACS_NYC.csv") %>% 
+acs19 <- readRDS(here("data/acs/migration_acs_allStates_2019.rds")) %>% 
+  mutate(YEAR = 2019)
+acs21 <- readRDS(here("data/acs/migration_acs_allStates_2021.rds")) %>% 
+  mutate(YEAR = 2021)
+acs22 <- readRDS(here("data/acs/migration_acs_allStates_2022.rds")) %>% 
+  mutate(YEAR = 2022)
+acs23 <- readRDS(here("data/acs/migration_acs_allStates_2023.rds")) %>% 
+  mutate(YEAR = 2023) %>% 
   rename(ST = STATE)
 acs_5yr_18_22 <- read_csv("Z:/0-Source Data/ACS/5_year_data/2018-2022/AH_5yr_withStdVars/2018_2022_5yrACS_StdVars.csv")
 
-### Create migration df to identify who moved to nyc
+### Create loop to filter and label columns
+# if MIGSP is 0 - person less than 1 year old/lived in same house 1 year ago) so set to ST value
+
 acs <- list(acs18, acs19, acs21, acs22, acs23)
 years <- c(18, 19, 21, 22, 23)
 
 for (i in 1:length(acs)) {
   
   df <- acs[[i]] %>% 
+    # convert columns to numeric values
+    mutate(across(-1, as.numeric),
+           previous_res = ifelse(MIGSP == 0, ST, 
+                                 MIGSP),
+           moved_flag = ifelse(previous_res!= ST, 
+                               1, 
+                               0),
+           in_migration = ifelse(ST ==36 & moved_flag == 1,
+                                 1,
+                                 0),
+           out_migration = ifelse(previous_res == 36 & moved_flag == 1, 
+                                  1,
+                                  0)) %>% 
+    filter(in_migration == 1 | out_migration == 1) %>% 
+    # create group labels for ethnicity, educational attainment, age, occupation, and working status
+    mutate(Ethnicity = fxn_Ethnicity(RAC1P, HISP), 
+           Ethnicity_label = fxn_label(Ethnicity),
+           EdAttain = fxn_EdAttain(SCHL),
+           EdAttain_label = fxn_label(EdAttain),
+           EdAttain6 = fxn_EdAttain6(SCHL),
+           EdAttain6_label = fxn_label(EdAttain6),
+           AgeForReport = fxn_AgeForReport(AGEP),
+           AgeForReport_label = fxn_label(AgeForReport, "age_3groups"),
+           occ_recode = fxn_occ_recode(OCCP),
+           occ_recode_label = fxn_label(occ_recode)) %>% 
+    # is_working = case_when(ESR %in% c(3, 6) ~ 0,
+    #                        ESR %in% c(1, 2, 4, 5) ~ 1,
+    #                        is.na(ESR) ~ NA,
+    #                        TRUE ~ -9999),
+    # is_inSchool = ifelse(SCH %in% c(2, 3), 1, 0),
+    # is_ageOOSOOW = ifelse(AGEP >= 16 & AGEP <= 24, 1, 0),
+    # oosoow = ifelse(is_working == 0 & is_inSchool == 0 & is_ageOOSOOW == 1, 1, 0)) %>% 
     rename_with(tolower) %>% # make column names lowercase
-    mutate(current_res = 36) %>% 
-    select(serialno, year, puma, st, adjinc, pwgtp, cit,
-           agep, # age
-           current_res, migsp, migpuma, fmigsp, # migration
-           powpuma, powsp, # working
-           rac1p, rac2p, rac3p, racaian, racasn, racblk, racnh, racnum, racpi, racwht # race/ethnicity
-    ) %>% 
-    # checked the ratio of NAs to see if it matches the % that had the same residency
-    #filter(is.na(migsp)) 
-    mutate(migsp_new = ifelse(is.na(migsp) == TRUE,
-                              36,
-                              migsp),
-           moved_flag = ifelse(migsp_new == current_res, 
-                               0, 
-                               1))
+    select("serialno","sporder","year", "pwgtp","wgtp","agep",
+           "puma","migpuma",
+           "st", "previous_res", "migsp", "in_migration", "out_migration",
+           "ethnicity_label", "edattain_label", "ageforreport_label", "occ_recode_label")
   
   assign(paste0("mig", years[i]), df)
 }
 
 mig <- rbind(mig18, mig19, mig21, mig22, mig23)
+
+#########################
+# In-Migration and Out-Migration from NYC?
+#########################
+
+mig %>% 
+  filter(out_migration == 1) %>% 
+  mutate(year = as.factor(year)) %>% 
+  uncount(pwgtp) %>% 
+  ggplot(aes(x = agep)) +
+  geom_histogram(fill = "#f6871f") +
+  facet_wrap(~year, nrow = 3)+ 
+  pru_theme() +
+  labs(title = "Distribution of Age of Out-Migration NYC 2023",
+       x = "Age",
+       y = "Count")
+
+mig %>% 
+  filter(in_migration == 1) %>% 
+  mutate(year = as.factor(year)) %>% 
+  uncount(pwgtp) %>% 
+  ggplot(aes(x = agep)) +
+  geom_histogram(fill = "#f6871f") +
+  facet_wrap(~year, nrow = 3)+ 
+   pru_theme() +
+  labs(title = "Distribution of Age of In-Migration NYC 2023",
+       x = "Age",
+       y = "Count")
+
+#########################
+# Occupations in vs out
+#########################
+
+occ <- mig %>% 
+  select(year, occ_recode_label, in_migration, out_migration) %>% 
+  group_by(year, occ_recode_label) %>% 
+  pivot_longer(cols = c(3, 4),
+               names_to = "migration", 
+               values_to = "count") %>%
+  ungroup() %>% 
+  group_by(year, occ_recode_label, migration) %>% 
+  summarise(count = sum(count)) %>% 
+  filter(occ_recode_label != c("occ_recode_-9999999"))
+
+ggplot(occ, aes(x = migration, y = count, fill = occ_recode_label)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~year) +
+  pru_theme()
+
 
 #########################
 # Who is moving to NYC?
@@ -125,14 +211,18 @@ migration23 %>%
 # Age distribution 
 
 age_mig <- mig %>% 
-  select(year, moved_flag, pwgtp, agep) %>% 
+  select(year, hincp, moved_flag, pwgtp, agep) %>% 
   filter(moved_flag == 1) %>% 
+  mutate(hincp = ifelse(hincp >500000,
+                        500000,
+                        hincp)) %>% 
   uncount(pwgtp)
 
 age_plot <- age_mig %>% 
-  ggplot(aes(x = agep)) +
+  ggplot(aes(x =agep)) +
   geom_histogram(fill = "#f6871f") +
   facet_wrap(~year, nrow = 3) +
+  scale_x_continuous(labels = scales::label_comma()) +
   pru_theme() +
   labs(title = "Distribution of Age of In-Migrants to NYC",
        x = "Age",
@@ -140,65 +230,83 @@ age_plot <- age_mig %>%
 
 ggsave(here("outputs", "age_dist_plot.png"), plot = age_plot, width = 5, height = 5, dpi = 300)
 
-  
-# Race / Ethnicity 
-eth_mig <- mig %>% 
+## Income
+income_plot <- age_mig %>% 
+  ggplot(aes(x = hincp)) +
+  geom_histogram(fill = "#f6871f") +
+  facet_wrap(~year, nrow = 3) +
+  scale_x_continuous(labels = scales::label_comma()) +
+  pru_theme() +
+  labs(title = "Distribution of Age of In-Migrants to NYC",
+       x = "Age",
+       y = "Count")
+
+ggsave(here("outputs", "inc_dist_plot.png"), plot = income_plot, width = 5, height = 5, dpi = 300)
+
+age_mig <- mig %>% 
+  select(year, moved_flag, pwgtp, agep, ethnicity_label) %>% 
   filter(moved_flag == 1) %>% 
   uncount(pwgtp) %>% 
-  select(year, racaian, racasn, racblk, racnh, racpi, racwht) %>% 
-  group_by(year) %>% 
-  summarize(across(c(racaian, racasn, racblk, racnh, racpi, racwht), 
-                   sum, na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(!year) %>% 
-  rename(ethnicity = name,
-         count = value)
+  pivot_longer(cols = c(4:9),
+               names_to = "race",
+               values_to = "flag") %>% 
+  filter(flag == 1) %>% 
+  select(year, agep, race)
 
-eth_in_plot <- eth_mig %>% 
-  ggplot(aes(x = ethnicity, y = count/1000, fill = factor(year))) +
+age_eth_plot <- mig %>% 
+  filter(in_migration == 1) %>% 
+  ggplot(aes(x = agep, y = ethnicity_label, fill = ethnicity_label)) +
+  geom_density_ridges() +
+  facet_wrap(~year, nrow = 3) +
+  pru_theme() +
+  labs(title = "Distribution of Age of in-Migrants to NYC",
+       x = "Age",
+       y = "Count") +
+  pru_theme() +
+  pru_palette("G2O")
+
+ggsave(here("outputs", "age_eth_plot.png"), plot = age_eth_plot, width = 6, height = 6, dpi = 200)
+
+
+  
+# Race / Ethnicity 
+eth_in_mig <- mig %>% 
+  filter(in_migration == 1) %>% 
+  select(year, pwgtp, ethnicity_label) %>% 
+  uncount(pwgtp) %>% 
+  group_by(year, ethnicity_label) %>% 
+  dplyr::summarize(count = n(), .groups = 'drop') %>% 
+  ungroup()
+
+eth_out_mig <- mig %>% 
+  filter(out_migration == 1) %>% 
+  select(year, pwgtp, ethnicity_label) %>% 
+  uncount(pwgtp) %>% 
+  group_by(year, ethnicity_label) %>% 
+  dplyr::summarize(count = n(), .groups = 'drop') %>% 
+  ungroup()
+
+eth_in_plot <- eth_in_mig %>% 
+  ggplot(aes(x = ethnicity_label, y = count/1000, fill = factor(year))) +
   geom_col(position = "dodge") +
   labs(title = "Race & Ethnicity of In-Migrants to NYC 2018-2023",
        x = "Ethnicity",
        y = "People (in thousands)",
        fill = "") +
   pru_theme() +
-  pru_palette("dis6")
+  pru_palette("dis5")
+
+eth_out_mig %>% 
+  ggplot(aes(x = ethnicity_label, y = count/1000, fill = factor(year))) +
+  geom_col(position = "dodge") +
+  labs(title = "Race & Ethnicity of Out-Migrants to NYC 2018-2023",
+       x = "Ethnicity",
+       y = "People (in thousands)",
+       fill = "") +
+  pru_theme() +
+  pru_palette("dis5")
 
 ggsave(here("outputs", "eth_in_plot.png"), plot = eth_in_plot, width = 5, height = 3, dpi = 300)
-
-move22 %>% 
-  #mutate(ct = row_number()) %>% 
-  select(racaian, racasn, racblk, racnh, racpi, racwht) %>% 
-  pivot_longer(cols = 1:6, 
-               names_to = "ethnicity",
-               values_to = "count") %>% 
-  group_by(ethnicity) %>% 
-  summarize(count = sum(count)) %>% 
-  ggplot(aes(x = ethnicity, y = count/1000)) +
-  geom_col() +
-  labs(x = "Ethnicity",
-       y = "People (in thousands)") +
-  pru_theme() 
-
-# Race / Ethnicity Part 2
-
-dem <- move22 %>% 
-  select(agep, rac1p) %>% 
-  mutate(rac1p = factor(rac1p)) %>% 
-  group_by(agep, rac1p) %>% 
-  summarize(count = n(), .groups = 'drop')  # count occurrences of each agep, rac1p combo
-
-
-move22 %>% 
-  select(agep, rac1p) %>% 
-  mutate(rac1p = factor(rac1p)) %>% 
-  group_by(agep, rac1p) %>% 
-  summarize(count = n(), .groups = 'drop') %>% 
-  ggplot(aes(x = rac1p, y = count/1000)) +
-  geom_col() +
-  pru_theme() +
-  labs(x = "Race",
-       y = "People (in thousands)")
   
 
 # Source of Migration
@@ -237,6 +345,8 @@ migsp_mapping <- data.frame(
 # View the data frame
 print(migsp_mapping)
 
+regions <- migsp_mapping %>% 
+  filter(str_detect(state_country, "Not Specified"))
 
 # Including states, Puerto Rico, and Other US Island Areas, Oceania, Not Specified, or At Sea
 domestic <- move22 %>% 
@@ -256,10 +366,11 @@ foreign <- move22 %>%
   filter(migsp_new >= 109 & migsp_new <= 501) %>% 
   rename(migsp = migsp_new) %>% 
   left_join(migsp_mapping, by = "migsp") %>% 
+  filter(!state_country %in% regions$state_country) %>% 
   group_by(state_country) %>% 
   summarize(count = n(), .groups = 'drop') %>% 
   arrange(-count) %>% 
-  slice(-c(7, 9, 10, 13:15)) %>% 
+  #slice(-c(7, 9, 10, 13:15)) %>% 
   mutate(ct = row_number()) %>% 
   select(ct, everything())
 
@@ -295,4 +406,72 @@ top10_22<- ggplot(top10) +
   theme(axis.text.y = element_blank())
 
 ggsave(here("outputs", "source_in_plot.png"), plot = top10_22, width = 6, height = 4, dpi = 300)
+
+
+
+domestic <- mig %>% 
+  filter(moved_flag == 1) %>% 
+  uncount(pwgtp) %>% 
+  select(year, migsp_new, migpuma, fmigsp) %>% 
+  filter(migsp_new <= 72 | migsp_new == 555) %>% 
+  rename(migsp = migsp_new) %>% 
+  left_join(migsp_mapping, by = "migsp") %>% 
+  group_by(year, state_country) %>% 
+  summarize(count = n(), .groups = 'drop') %>% 
+  arrange(year,-count) %>% 
+  group_by(year) %>% 
+  slice_head(n = 5) %>% 
+  mutate(ct = row_number()) %>% 
+  select(ct, everything())
+
+foreign <- mig %>% 
+  filter(moved_flag == 1) %>% 
+  uncount(pwgtp) %>% 
+  select(year, migsp_new, migpuma, fmigsp) %>% 
+  filter(migsp_new >= 109 & migsp_new <= 501) %>% 
+  rename(migsp = migsp_new) %>% 
+  left_join(migsp_mapping, by = "migsp") %>% 
+  filter(!state_country %in% regions$state_country) %>% 
+  group_by(year, state_country) %>% 
+  summarize(count = n(), .groups = 'drop') %>% 
+  arrange(year,-count) %>% 
+  group_by(year) %>% 
+  slice_head(n = 5) %>% 
+  mutate(ct = row_number()) %>% 
+  select(ct, everything())
+
+top5 <- domestic %>%
+  left_join(foreign, by = c("ct", "year")) %>% 
+  rename(domestic = state_country.x,
+         foreign = state_country.y)
+
+# incorporating new years
+top5 <- ggplot(top5) +
+  # Foreign bars (negative values)
+  geom_col(aes(x = interaction(ct, year), y = -count.y, fill = as.factor(year)), 
+           show.legend = TRUE, position = "dodge", alpha = 0.5) + 
+  # Domestic bars (positive values)
+  geom_col(aes(x = interaction(ct, year), y = count.x, fill = as.factor(year)), 
+           show.legend = TRUE, position = "dodge") +
+  geom_text(aes(x = interaction(ct, year), y = count.x / 2, label = domestic), 
+            color = "white", size = 3.25, fontface = "bold", position = position_dodge(width = 0.9)) +  # Labels for domestic bars
+  geom_text(aes(x = interaction(ct, year), y = -count.y / 2, label = foreign), 
+            color = "black", size = 3.25, fontface = "bold", position = position_dodge(width = 0.9)) +  # Labels for foreign bars
+  scale_y_continuous(
+    breaks = seq(-8000, 20000, by = 4000),
+    labels = function(x) abs(x)) +  # Custom breaks
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) +
+  labs(x = "",
+       y = "People", 
+       title = "Top 5 Foreign and Domestic Sources of In-Migration to NYC 2018-2023",
+       fill = "Year") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip() + # Flip the axes if you want horizontal bars
+  annotate("text", x = 26.5, y = 4000, label = "Domestic", size = 5, fontface = "bold") +
+  annotate("text", x = 26.5, y = -2000, label = "Foreign", size = 5, fontface = "bold") +
+  theme(axis.text.y = element_blank()) +
+  pru_theme() +
+  pru_palette("B2O")
+
+ggsave(here("outputs", "source_in_plot_5yr.png"), plot = top5, width = 6, height = 4, dpi = 300)
 
