@@ -152,11 +152,11 @@ if(donotrun == FALSE){
   ######## Get API data (loop through states) #######
   ## LOOP: try calling all states and looping by year #####
   
-  years_to_loop <- c(2018, 2019, 2021:2023)
+  years_to_loop <- c(2016:2019, 2021:2023)
   
   for(y in 1:length(years_to_loop)){  #y=1
     
-    temp_year <- years_to_loop[[5]]
+    temp_year <- years_to_loop[[y]]
     print(paste0("Starting ", temp_year))
     
     temp_typeVar <- ifelse(temp_year >= 2020, "TYPEHUGQ", "TYPE")
@@ -164,9 +164,11 @@ if(donotrun == FALSE){
     temp_stVar <- ifelse(temp_year >= 2023, "STATE", "ST")
     
     # UPDATE VARIABLES BASED ON CALL
-    variables_to_get <- c("SERIALNO", "SPORDER", "PWGTP", "WGTP", "PUMA", "MIGPUMA", temp_relVar,
-                          "AGEP", "ADJHSG", temp_stVar, "MIGSP", "OCCP", "SCHL", "HINCP",
-                          "RAC1P", "HISP")
+    variables_to_get <- c("SERIALNO", "SPORDER", "PWGTP", "WGTP", 
+                          temp_stVar, "PUMA", "MIGPUMA", "MIGSP", # geography
+                          "AGEP", "OCCP", "SCHL", "ESR", #dems of interest (age, occuptation, education)
+                          "HINCP", "FINCP", "GRPIP","ADJINC", # income
+                          "RAC1P", "HISP") # ethnicity
     api_vars <- paste(variables_to_get, collapse = ",")
     
     ## Set up API call
